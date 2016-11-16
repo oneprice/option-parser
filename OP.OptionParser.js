@@ -1,10 +1,34 @@
 /**
+ * Common Option String Parser
+ *
+ * Copyright ONEPRICE 2016.
+ *
+ *
+ *
+ * @author sukhoi@thecommerce.co.kr, xeni@thecommerce.co.kr
+ *
+ * @origin https://github.com/oneprice/option-parser
  * @see 상품옵션 표현규약 http://blog.oneprice.co.kr/archives/13
  * @type {{}}
  */
-window.OP = window.OP || {};
-window.OP.OptionParser = (function () {
+// root instance.
+var _root = typeof global != 'undefined' ? global : window;		// global for node, window for browser.
+
+(function (root) {
+  'use strict'
+
+  // constant.
   var OptionParserVersion = 0.3, mustEscape = ',:;?+=”<>()\\';
+
+  // main module to expose.
+  var thiz = {version: OptionParserVersion, parse: parse, test: test};
+
+  // register into OP of root.
+  if(root){
+    var OP = root.OP || {};
+    OP.OptionParser = thiz;
+    root.OP = OP;
+  }
 
   /**
    * 특수토큰 문자 escape. escape indicator char = \
@@ -176,15 +200,83 @@ window.OP.OptionParser = (function () {
     return option;
   }
 
-  return {version: OptionParserVersion, parse: parse};
-})();
 
-jQuery(function ($) {
-//  return; // 사용 예.
-  var option = OP.OptionParser.parse('<옵션?select>85,90,95');
-  console.log(option);
-  option = OP.OptionParser.parse('<사이즈"신발 크기 선택"+색상>S+빨강=5,S+노랑=5,M+빨강=5,M+노랑=5,L+빨강=5,L+노랑=5');
-  console.log(option);
-  option = OP.OptionParser.parse('<재질+성명?text=2:30"이름을 입력하세요\(한글 또는 한자\)">나무+성명=50,플라스틱+성명=100');
-  console.log(option);
-});
+  /**
+   * Test itself
+   */
+  function test() {
+    //! internal test helper functions.
+    function _log(){if(console) console.log.apply(console, arguments);}
+    function _case(name){_log('------------\n'+'CASE:'+name)};
+    var _passed = 0, _failed = 0;
+    function _assert(msg, cond){if(cond) _passed++; else _failed++; return _log('test['+(_passed+_failed)+']: '+msg+' -> '+(cond ? 'OK' : 'ERROR!'))}
+    function _test_option(option_text, callback){
+      option_text = option_text||'';
+      _case(' OptionText='+option_text);
+      try{
+        //ignore if starts with '#'
+        var $O = option_text.startsWith('#') ? {} : parse(option_text);
+        return callback(null, $O, option_text);
+      } catch(err){
+        return callback(err);
+      }
+    }
+
+    // test case: root scope.
+    _test_option('#OP.OptionParser', function(err, $){
+      _assert('OP.OptionParser must be available globally', (typeof OP.OptionParser != 'undefined'));
+    })
+
+    // test case: simple w/o label
+    _test_option('85,90,95', function(err, $option){
+      _log('$option=', $option);
+      //_assert('labels[0].name must be 옵션(default)', $option.labels[0].name == '옵션');
+      _assert('labels has 1 items', $option.labels.length == 1);
+      _assert('options has 3 items', $option.options.length == 3);
+    })
+
+    // test case: simple.
+    _test_option('<옵션>85,90,95', function(err, $option){
+      _log('$option=', $option);
+      _assert('labels[0].name must be 옵션', $option.labels[0].name == '옵션');
+      _assert('labels has 1 items', $option.labels.length == 1);
+      _assert('options has 3 items', $option.options.length == 3);
+    })
+
+    // test case: simple.
+    _test_option('<옵션?select>85,90,95', function(err, $option){
+      _log('$option=', $option);
+      _assert('options has 3 items', $option.options.length == 3);
+    })
+
+    // test case: combination with help
+    _test_option('<사이즈"신발 크기 선택"+색상>S+빨강=5,S+노랑=5,M+빨강=5,M+노랑=5,L+빨강=5,L+노랑=5', function(err, $option){
+      _log('$option=', $option);
+      _log('$option.options[2]=', $option.options[2]);
+      _assert('labels has 2 items', $option.labels.length == 2);
+      _assert('labels[0].help', $option.labels[0].help == '신발 크기 선택');
+      _assert('options has 6 items', $option.options.length == 6);
+      _assert('options[1].stock must be 5', $option.options[1].stock == 5);
+      _assert('options[2].option.색상 must be 빨강', $option.options[2].option['색상'] == '빨강');
+    })
+
+    // test case: combination with text input.
+    _test_option('<재질+성명?text=2:30"이름을 입력하세요\\(한글 또는 한자\\)">나무+성명=50,플라스틱+성명=100', function(err, $option) {
+      _log('$option=', $option);
+      _assert('labels has 2 items', $option.labels.length == 2);
+      _assert('labels[1].help must be "이름을 입력하세요(한글 또는 한자)"', $option.labels[1].help == '이름을 입력하세요(한글 또는 한자)');
+      _assert('option has 2 items', $option.options.length == 2);
+      _assert('each option should have diff stocks', $option.options[1].stock > $option.options[0].stock);
+    })
+
+    // overall
+    _test_option('#OVERALL', function(err, $){
+      _log('TOTAL:'+(_passed+_failed)+', PASSED:'+_passed+', FAILED:'+_failed);
+    })
+
+    // returns true if no failure.
+    return _failed ? false : true;
+  }
+
+  return thiz;
+})(_root);
